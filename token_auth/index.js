@@ -1,5 +1,6 @@
 const uuid = require('uuid');
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const onFinished = require('on-finished');
 const bodyParser = require('body-parser');
 const path = require('path');
@@ -9,8 +10,9 @@ const fs = require('fs');
 const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-const SESSION_KEY = 'Authorization';
+const SESSION_KEY = 'session';
 
 class Session {
     #sessions = {}
@@ -44,6 +46,7 @@ class Session {
 
     init(res) {
         const sessionId = uuid.v4();
+        res.set('Set-Cookie', `${SESSION_KEY}=${sessionId}; HttpOnly`);
         this.set(sessionId);
 
         return sessionId;
@@ -53,6 +56,7 @@ class Session {
         const sessionId = req.sessionId;
         delete this.#sessions[sessionId];
         this.#storeSessions();
+        res.set('Set-Cookie', `${SESSION_KEY}=; HttpOnly`);
     }
 }
 
@@ -60,9 +64,10 @@ const sessions = new Session();
 
 app.use((req, res, next) => {
     let currentSession = {};
-    let sessionId = req.get(SESSION_KEY);
+    let sessionId;
 
-    if (sessionId) {
+    if (req.cookies[SESSION_KEY]) {
+        sessionId = req.cookies[SESSION_KEY];
         currentSession = sessions.get(sessionId);
         if (!currentSession) {
             currentSession = {};
@@ -85,6 +90,8 @@ app.use((req, res, next) => {
 });
 
 app.get('/', (req, res) => {
+    console.log(req.session);
+
     if (req.session.username) {
         return res.json({
             username: req.session.username,
@@ -126,7 +133,7 @@ app.post('/api/login', (req, res) => {
         req.session.username = user.username;
         req.session.login = user.login;
 
-        res.json({ token: req.sessionId });
+        res.json({ username: login });
     }
 
     res.status(401).send();
